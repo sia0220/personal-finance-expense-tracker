@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Budgets</h2>
+
+<section>
+    <h3>Create Budget</h3>
+
+    <form>
+        <label for="category">Category</label>
+        <input type="text" id="category" name="category">
+
+        <label for="monthly_limit">Monthly Limit</label>
+        <input type="number" id="monthly_limit" name="monthly_limit" step="0.01">
+
+        <label for="month">Month</label>
+        <input type="month" id="month" name="month">
+
+        <button type="button">Create Budget</button>
+    </form>
+</section>
+
+<section>
+    <h3>Current Budgets</h3>
+    <p>No budgets created yet.</p>
+</section>
+{% endblock %}
