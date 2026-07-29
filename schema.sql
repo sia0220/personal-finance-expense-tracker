@@ -1,4 +1,4 @@
-PRAGMA foreighn_keys = ON;
+PRAGMA foreign_keys = ON;
 
 DROP TABLE IF EXISTS alerts;
 DROP TABLE IF EXISTS transactions;

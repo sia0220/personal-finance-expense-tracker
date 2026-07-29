@@ -12,7 +12,7 @@ def index():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        flash("Login logic will be implemented in Sprint 2.")
+        flash("Login logic will be implemented in Sprint 1.")
         return redirect(url_for("login"))
     
     return render_template("login.html")
@@ -20,7 +20,7 @@ def login():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        flash("Registration logic will be implemented in Sprint 2.")
+        flash("Registration logic will be implemented in Sprint 1.")
         return redirect(url_for("register"))
     
     return render_template("register.html")
@@ -43,7 +43,7 @@ def reports():
 
 @app.route("/logout")
 def logout():
-    flash("Logout logic will be implemented in Sprint 2.")
+    flash("Logout logic will be implemented in Sprint 1.")
     return redirect(url_for("login"))
 
 if __name__ == "__main__":
