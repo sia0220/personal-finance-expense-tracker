@@ -34,7 +34,7 @@ def create_default_categories(user_id):
         conn.execute(
             """
             INSERT OR IGNORE INTO categories (user_id, name, is_default)
-            VALUES (???)
+            VALUES (?, ?, ?)
             """,
             (user_id, category, 1)
         )

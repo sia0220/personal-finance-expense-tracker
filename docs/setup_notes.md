@@ -29,3 +29,16 @@
 - Connect transaction forms to the database.
 - Add budget and alert calculations.
 - Add reports and charts.
+
+## Sprint 0 Smoke Test
+
+- [x] Virtual environment activated successfully.
+- [x] Dependencies installed from requirements.txt.
+- [x] Python files passed the syntax check.
+- [x] Database initialized successfully.
+- [x] Required database tables were created.
+- [x] Flask application started locally.
+- [x] Login and registration placeholder pages loaded.
+- [x] Dashboard, transactions, budgests, and reports pages loaded.
+- [x] Navigation links worked correctly. 
+- [x] Placeholder forms submitted without crashing.
