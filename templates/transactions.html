@@ -1,54 +1,239 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2>Transactions</h2>
+<section class="page-heading">
+    <div>
+        <h2>Transactions</h2>
+        <p>
+            Add income and expenses and review your transaction history.
+        </p>
+    </div>
+</section>
 
-<section>
+<div class="development-notice">
+    <strong>Sprint 2 Preparation:</strong>
+    The transaction page layout and validation are being prepared.
+    Database saving will be connected after authentication and user
+    sessions are available from Sprint 1.
+</div>
+
+<section class="page-section">
     <h3>Add Transaction</h3>
 
-    <form>
-        <label for="amount">Amount</label>
-        <input type="number" id="amount" name="amount" step="0.01">
+    <!--
+        This form is currently a frontend preview.
+        After Sprint 1 is merged, it will use method="POST" and submit
+        to the transactions route.
+    -->
+    <form class="transaction-form">
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="amount">Amount</label>
 
-        <label for="type">Type</label>
-        <select id="type" name="type">
-            <option value="expense">Expense</option>
-            <option value="income">Income</option>
-        </select>
+                <input
+                    type="number"
+                    id="amount"
+                    name="amount"
+                    min="0.01"
+                    step="0.01"
+                    placeholder="0.00"
+                    required
+                >
+            </div>
 
-        <label for="category">Category</label>
-        <input type="text" id="category" name="category">
+            <div class="form-group">
+                <label for="type">Type</label>
 
-        <label for="transaction_date">Date</label>
-        <input type="date" id="transaction_date" name="transaction_date">
+                <select id="type" name="type" required>
+                    <option value="">Select a type</option>
+                    <option value="expense">Expense</option>
+                    <option value="income">Income</option>
+                </select>
+            </div>
 
-        <label for="description">Description</label>
-        <input type="text" id="description" name="description">
+            <div class="form-group">
+                <label for="category_id">Category</label>
 
-        <button type="button">Add Transaction</button>
+                <select
+                    id="category_id"
+                    name="category_id"
+                    disabled
+                    required
+                >
+                    <option value="">
+                        Categories will appear after Sprint 1.
+                    </option>
+                </select>
+
+                <small>
+                    Categories are created for each user during registration.
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label for="transaction_date">Date</label>
+
+                <input
+                    type="date"
+                    id="transaction_date"
+                    name="transaction_date"
+                    required
+                >
+            </div>
+
+            <div class="form-group form-group-full">
+                <label for="description">Description</label>
+
+                <input
+                    type="text"
+                    id="description"
+                    name="description"
+                    placeholder="Optional description"
+                >
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="button" disabled>
+                Add Transaction
+            </button>
+
+            <span class="disabled-explanation">
+                Available after Sprint 1 is merged
+            </span>
+        </div>
     </form>
 </section>
 
-<section>
-    <h3>Transaction List</h3>
+<section class="page-section">
+    <div class="section-heading">
+        <div>
+            <h3>Search and Filter</h3>
+            <p>Use these options to narrow the transaction list.</p>
+        </div>
+    </div>
 
-    <table>
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th>Type</th>
-                <th>Category</th>
-                <th>Amount</th>
-                <th>Description</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
+    <form class="filter-form">
+        <div class="filter-grid">
+            <div class="form-group">
+                <label for="search">Search Description</label>
 
-        <tbody>
-            <tr>
-                <td colspan="6">No transactions added yet.</td>
-            </tr>
-        </tbody>
-    </table>
+                <input
+                    type="search"
+                    id="search"
+                    name="search"
+                    placeholder="Search transactions"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="filter_category_id">Category</label>
+
+                <select
+                    id="filter_category_id"
+                    name="category_id"
+                    disabled
+                >
+                    <option value="">All categories</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="filter_type">Type</label>
+
+                <select id="filter_type" name="type">
+                    <option value="">All types</option>
+                    <option value="expense">Expense</option>
+                    <option value="income">Income</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="start_date">Start Date</label>
+
+                <input
+                    type="date"
+                    id="start_date"
+                    name="start_date"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="end_date">End Date</label>
+
+                <input
+                    type="date"
+                    id="end_date"
+                    name="end_date"
+                >
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="button" disabled>
+                Apply Filters
+            </button>
+
+            <button
+                type="button"
+                class="secondary-button"
+                disabled
+            >
+                Clear Filters
+            </button>
+        </div>
+    </form>
+</section>
+
+<section class="page-section">
+    <div class="section-heading">
+        <div>
+            <h3>Transaction History</h3>
+            <p>Your saved income and expenses will appear here.</p>
+        </div>
+    </div>
+
+    <div class="table-wrapper">
+        <table class="transaction-table">
+            <thead>
+                <tr>
+                    <th scope="col">Date</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Category</th>
+                    <th scope="col">Description</th>
+                    <th scope="col">Amount</th>
+                    <th scope="col">Actions</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                <tr>
+                    <td colspan="6" class="empty-state">
+                        No transactions have been added yet.
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="page-section">
+    <h3>Edit Transaction Preview</h3>
+
+    <p class="section-description">
+        The edit form will use the same fields and validation as the
+        add-transaction form. It will be connected after saved
+        transactions can be retrieved for the logged-in user.
+    </p>
+
+    <div class="action-preview">
+        <button type="button" class="secondary-button" disabled>
+            Edit
+        </button>
+
+        <button type="button" class="danger-button" disabled>
+            Delete
+        </button>
+    </div>
 </section>
 {% endblock %}
