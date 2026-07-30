@@ -6,17 +6,17 @@
 <section class="summary-grid">
     <div class="card">
         <h3>Total Income</h3>
-        <p>$0.00</p>
+        <p>${{ "%.2f"|format(total_income|default(0, true)) }}</p>
     </div>
 
     <div class="card">
         <h3>Total Expenses</h3>
-        <p>$0.00</p>
+        <p>${{ "%.2f"|format(total_expenses|default(0, true)) }}</p>
     </div>
 
     <div class="card">
         <h3>Remaining Budget</h3>
-        <p>$0.00</p>
+        <p>${{ "%.2f"|format(remaining_budget|default(0, true)) }}</p>
     </div>
 </section>
 
@@ -27,11 +27,45 @@
 
 <section>
     <h3>Budget Alerts</h3>
-    <p>No alerts yet.</p>
+     {% if alerts %}
+        <ul class="alert-list">
+            {% for alert in alerts %}
+                <li class="alert-item alert-{{ alert.alert_type|replace(' ', '-') }}">
+                    <strong>{{ alert.alert_type|title }}</strong>
+                    <span>{{ alert.triggered_at }}</span>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No alerts yet.</p>
+    {% endif %}
 </section>
 
 <section>
     <h3>Recent Transactions</h3>
-    <p>No recent transactions available.</p>
+    {% if recent_transactions %}
+        <table class="recent-transactions">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for transaction in recent_transactions %}
+                    <tr>
+                        <td>{{ transaction.transaction_date }}</td>
+                        <td>{{ transaction.description or "No description" }}</td>
+                        <td>{{ transaction.type|title }}</td>
+                        <td>${{ "%.2f"|format(transaction.amount) }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No recent transactions available.</p>
+    {% endif %}
 </section>
 {% endblock %}

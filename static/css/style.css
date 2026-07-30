@@ -82,3 +82,63 @@ td {
     padding: 10px;
     text-align: left;
 }
+
+.card p {
+    margin: 8px 0 0;
+    font-size: 1.6rem;
+    font-weight: bold;
+}
+
+.alert-list {
+    display: grid;
+    gap: 10px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.alert-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px;
+    background-color: #f5f5f5;
+    border-left: 4px solid #777;
+    border-radius: 6px;
+}
+
+.alert-near-limit {
+    background-color: #fff3cd;
+    border-left-color: #d39e00;
+}
+
+.alert-over-limit {
+    background-color: #f8d7da;
+    border-left-color: #c82333;
+}
+
+.alert-item span {
+    white-space: nowrap;
+}
+
+.recent-transactions th:last-child,
+.recent-transactions td:last-child {
+    text-align: right;
+}
+
+@media (max-width: 700px) {
+    main {
+        width: auto;
+        margin: 15px;
+        padding: 18px;
+    }
+
+    .summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    table {
+        display: block;
+        overflow-x: auto;
+    }
+}
