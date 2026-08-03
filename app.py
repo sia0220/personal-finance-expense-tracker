@@ -85,18 +85,32 @@ def register():
 #*******
 @app.route("/dashboard")
 def dashboard():
+    #Check if your user session variable exists
+    # Change 'user_id' to whatever key you used when you set up the login route
+    if 'user_id' not in session: 
+        flash("Please log in to access this page")
+        return redirect(url_for('login'))
     return render_template("dashboard.html")
 
 @app.route("/transactions")
 def transactions():
+    if 'user_id' not in session: 
+        flash("Please log in to access this page")
+        return redirect(url_for('login'))
     return render_template("transactions.html")
 
 @app.route("/budgets")
 def budgets():
+    if 'user_id' not in session: 
+        flash("Please log in to access this page")
+        return redirect(url_for('login'))
     return render_template("budgets.html")
 
 @app.route("/reports")
 def reports():
+    if 'user_id' not in session: 
+        flash("Please log in to access this page")
+        return redirect(url_for('login'))
     return render_template("reports.html")
 #***Added BY DEVIN ********
 @app.route("/logout")

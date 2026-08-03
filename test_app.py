@@ -81,8 +81,7 @@ def test_tc04_login_wrong_password(client):
         follow_redirects=True
     )
     assert b"Invalid email or password" in response.data
-    
-@pytest.mark.skip(reason="Logout logic pending in Sprint 1")
+
 def test_tc05_logout(auth_client):
     # TC-05 | Logout | Click logout | Session ends and user returns to login[cite: 14]
     response = auth_client.get("/logout", follow_redirects=True)
