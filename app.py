@@ -98,12 +98,15 @@ def budgets():
 @app.route("/reports")
 def reports():
     return render_template("reports.html")
-
+#***Added BY DEVIN ********
 @app.route("/logout")
 def logout():
-    flash("Logout logic will be implemented in Sprint 1.")
-    return redirect(url_for("login"))
-
+    session.clear() 
+    
+    flash("successfully logged out") 
+    
+    return redirect(url_for('login'))
+#****************************
 if __name__ == "__main__":
     init_db()
     app.run(debug=True)
