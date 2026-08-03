@@ -66,22 +66,23 @@ def register():
                 "INSERT INTO users (email, password_hash) VALUES (?, ?)",
                 (email, hashed_pw)
             )
-            conn.commit()
+            new_user_id = cursor.lastrowid
             
-            # Fetch the newly created user_id to assign default categories
-            user_id = cursor.lastrowid
-            create_default_categories(user_id)
+            conn.commit() 
             
-            flash("Registration successful! Please log in.")
-            return redirect(url_for("login"))
+            create_default_categories(new_user_id)
+            
+            flash("Registration successful")
+            return redirect(url_for('login'))
+            
         except sqlite3.IntegrityError:
-            # Triggers if the email is not unique (violates the UNIQUE constraint in the schema)
-            flash("Email is already registered.")
-            return redirect(url_for("register"))
+            flash("Email is already registered")
+            return redirect(url_for('register'))
+            
         finally:
             conn.close()
             
-    return render_template("register.html")
+    return render_template('register.html')
 #*******
 @app.route("/dashboard")
 def dashboard():

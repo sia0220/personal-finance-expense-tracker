@@ -181,3 +181,39 @@ def test_tc14_spending_by_category(auth_client):
 def test_tc15_monthly_trend(auth_client):
     # TC-15 | Monthly Trend | Add transactions across months | Monthly summary displays correctly[cite: 14]
     pass
+
+def test_tc16_default_categories_inserted(client):
+    # Register a new, unique user
+    test_email = "categories_test@example.com"
+    response = client.post(
+        "/register",
+        data={"email": test_email, "password": "securepassword"},
+        follow_redirects=True
+    )
+    assert b"Registration successful" in response.data
+
+    # Connect to the database to verify the categories
+    from database import get_db_connection # Adjust import if needed based on your setup
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 1. Get the new user's ID
+    cursor.execute("SELECT user_id FROM users WHERE email = ?", (test_email,))
+    user = cursor.fetchone()
+    assert user is not None, "User was not created in the database"
+    user_id = user['user_id']
+
+    # 2. Fetch the categories assigned to this user
+    cursor.execute("SELECT name, is_default FROM categories WHERE user_id = ?", (user_id,))
+    categories = cursor.fetchall()
+    conn.close()
+
+    # 3. Assert that 6 categories were created
+    assert len(categories) == 6, f"Expected 6 categories, but found {len(categories)}"
+
+    # 4. Assert that the specific names match our database.py defaults
+    expected_categories = ["Food", "Transportation", "Bills", "School", "Entertainment", "Savings"]
+    db_category_names = [cat['name'] for cat in categories]
+    
+    for expected in expected_categories:
+        assert expected in db_category_names, f"Missing default category: {expected}"
