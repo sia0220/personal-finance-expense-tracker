@@ -1,7 +1,30 @@
 # Test file for verifying that the authentication workflow and route protection function correctly.
+import os
 import pytest
+import tempfile
+import database
 from app import app
 from database import init_db, get_db_connection
+
+@pytest.fixture(autouse=True)
+def test_db_setup():
+    """Automatically swap to an isolated test database for every test and clean it up after."""
+
+    db_fd, db_path = tempfile.mkstemp(suffix=".db")
+    
+    database.DB_NAME = db_path
+    
+    # Initialize the fresh database
+    init_db()
+    
+    yield
+    
+    os.close(db_fd)
+    try:
+        os.remove(db_path)
+    except PermissionError:
+        
+        pass
 
 @pytest.fixture
 def client():

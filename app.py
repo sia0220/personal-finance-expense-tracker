@@ -1,3 +1,5 @@
+import email
+
 from flask import Flask, render_template, redirect, url_for, request, flash, session
 from flask_bcrypt import Bcrypt
 from functools import wraps
@@ -31,7 +33,9 @@ def login():
     if request.method == "POST":
         email = request.form.get("email")
         password = request.form.get("password")
-
+        if not email or not password:
+            flash("Email and password are required.")
+            return redirect(url_for("login"))
         conn = get_db_connection()
         user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
         conn.close()
@@ -39,6 +43,7 @@ def login():
         
         if user and bcrypt.check_password_hash(user["password_hash"], password):
             session["user_id"] = user["user_id"]
+            flash("Successfully logged in")
             return redirect(url_for("dashboard"))
         else:
             flash("Invalid email or password.")
@@ -60,23 +65,32 @@ def register():
         hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
         
         conn = get_db_connection()
+        cursor = conn.cursor()
+        new_user_id = None
         try:
-            cursor = conn.cursor()
             cursor.execute(
                 "INSERT INTO users (email, password_hash) VALUES (?, ?)",
                 (email, hashed_pw)
             )
             new_user_id = cursor.lastrowid
+            conn.commit()
             
-            conn.commit() 
-            
-            create_default_categories(new_user_id)
-            
+            try:
+                create_default_categories(new_user_id)
+            except Exception as cat_error:
+                cursor.execute("DELETE FROM users WHERE user_id = ?", (new_user_id,))
+                conn.commit()
+                raise cat_error
+                
             flash("Registration successful")
             return redirect(url_for('login'))
             
         except sqlite3.IntegrityError:
             flash("Email is already registered")
+            return redirect(url_for('register'))
+        except Exception:
+            conn.rollback()
+            flash("An error occurred during registration. Please try again.")
             return redirect(url_for('register'))
             
         finally:
