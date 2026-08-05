@@ -12,18 +12,21 @@ def test_db_setup():
 
     db_fd, db_path = tempfile.mkstemp(suffix=".db")
     
+   # Save original DB name to restore during cleanup
+    original_db_name = database.DB_NAME
     database.DB_NAME = db_path
     
-    # Initialize the fresh database
+    # Initialize the fresh test database
     init_db()
     
     yield
     
+    # Restoration and Cleanup
+    database.DB_NAME = original_db_name
     os.close(db_fd)
     try:
         os.remove(db_path)
     except PermissionError:
-        
         pass
 
 @pytest.fixture
@@ -33,8 +36,6 @@ def client():
     app.secret_key = "test_secret_key"
     
     with app.test_client() as client:
-        with app.app_context():
-            init_db()
         yield client
 
 @pytest.fixture
