@@ -18,7 +18,8 @@ def init_db():
     conn.close()
     print("Database initialized successfully.")
 
-def create_default_categories(user_id):
+def create_default_categories(conn, user_id):
+    """Inserts default categories for a user using an existing database connection."""
     default_categories = [
         "Food",
         "Transportation",
@@ -28,8 +29,6 @@ def create_default_categories(user_id):
         "Savings"
     ]
 
-    conn = get_db_connection()
-
     for category in default_categories:
         conn.execute(
             """
@@ -38,9 +37,6 @@ def create_default_categories(user_id):
             """,
             (user_id, category, 1)
         )
-
-    conn.commit()
-    conn.close()
 
 if __name__ == "__main__":
     init_db()
