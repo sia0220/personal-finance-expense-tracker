@@ -141,6 +141,15 @@ def create_budget():
         return redirect(url_for("budgets"))
 
     conn = get_db_connection()
+    owns_category = conn.execute(
+        "SELECT 1 FROM categories WHERE category_id = ? AND user_id = ?",
+        (category_id, user_id),
+    ).fetchone()
+    if owns_category is None:
+        conn.close()
+        flash("Please select a valid category.")
+        return redirect(url_for("budgets"))
+
     try:
         cur = conn.execute(
             """
@@ -153,7 +162,7 @@ def create_budget():
         budget_service.evaluate_budget(conn, user_id, cur.lastrowid)
         conn.commit()
         flash("Budget created.")
-    except Exception:
+    except sqlite3.IntegrityError:
         flash("Budget already exists for this category and month.")
     finally:
         conn.close()
