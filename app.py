@@ -12,6 +12,40 @@ app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-later")
 
 bcrypt = Bcrypt(app) 
 
+def check_and_update_alerts(conn, user_id, budget_id, monthly_limit, spent):
+    """
+    Evaluates spending against the budget limit and generates alerts.
+    Expects the spent amount to be calculated prior to calling.
+    """
+    # 1. Determine the required alert state
+    new_alert_type = None
+    if spent >= monthly_limit:
+        new_alert_type = 'over limit'
+    elif spent >= (monthly_limit * 0.8):
+        new_alert_type = 'near limit'
+        
+    # 2. Insert or update the alerts table
+    if new_alert_type:
+        existing_alert = conn.execute("""
+            SELECT alert_id, alert_type FROM alerts 
+            WHERE user_id = ? AND budget_id = ?
+        """, (user_id, budget_id)).fetchone()
+        
+        if existing_alert:
+            # Only update if the alert severity has changed
+            if existing_alert["alert_type"] != new_alert_type:
+                conn.execute("""
+                    UPDATE alerts 
+                    SET alert_type = ?, is_read = 0, triggered_at = CURRENT_TIMESTAMP 
+                    WHERE alert_id = ?
+                """, (new_alert_type, existing_alert["alert_id"]))
+        else:
+            # Insert a brand new alert
+            conn.execute("""
+                INSERT INTO alerts (user_id, budget_id, alert_type) 
+                VALUES (?, ?, ?)
+            """, (user_id, budget_id, new_alert_type))
+
 def login_required(f): 
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -140,6 +174,8 @@ def budgets():
         
         spent = spent_row["total_spent"] or 0.0
         remaining = b["monthly_limit"] - spent
+
+        check_and_update_alerts(conn, user_id, b["budget_id"], b["monthly_limit"], spent) #Alert check and update helper function addition
         
         budget_data.append({
             "budget_id": b["budget_id"],
