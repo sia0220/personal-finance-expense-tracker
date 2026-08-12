@@ -9,10 +9,9 @@ from database import init_db, get_db_connection, create_default_categories
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-later")
 
-# Added BY DEVIN ****
-bcrypt = Bcrypt(app) #Initializing Bcrypt for hashing
-# **************
-# Added BY DEVIN *****
+
+bcrypt = Bcrypt(app) 
+
 def login_required(f): 
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -21,13 +20,11 @@ def login_required(f):
             return redirect(url_for("login"))
         return f(*args, **kwargs)
     return decorated_function
-#****************
 @app.route("/")
 def index():
     return redirect(url_for("login"))
 
 @app.route("/login", methods=["GET", "POST"])
-# Added BY DEVIN *****
 def login():
     if request.method == "POST":
         email = request.form.get("email")
@@ -49,8 +46,7 @@ def login():
             return redirect(url_for("login"))
     
     return render_template("login.html")
-# *************************
-# ADDED BY DEVIN ********
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
@@ -90,7 +86,7 @@ def register():
             conn.close()
             
     return render_template('register.html')
-#*******
+
 @app.route("/dashboard")
 @login_required
 def dashboard():
@@ -104,7 +100,58 @@ def transactions():
 @app.route("/budgets")
 @login_required
 def budgets():
-    return render_template("budgets.html")
+    user_id = session["user_id"]
+    conn = get_db_connection()
+    if request.method == "POST":
+        category_id = request.form.get("category_id")
+        monthly_limit = float(request.form.get("monthly_limit"))
+        month = request.form.get("month")
+
+        try: 
+            conn.execute(
+                "INSERT INTO budgets (user_id, category_id, monthly_limit, month) VALUES (?, ?, ?, ?)",
+                (user_id, category_id, monthly_limit, month)
+            )
+            conn.commit()
+            flash("Budget successfully created!")
+        except sqlite3.IntegrityError:
+            flash("A budget for this category and month already exists.")
+            
+    # Fetch categories for the dropdown menu in the form
+    categories = conn.execute("SELECT * FROM categories WHERE user_id = ?", (user_id,)).fetchall()
+    
+    # Fetch all budgets for the user
+    user_budgets = conn.execute("""
+        SELECT b.budget_id, c.name AS category_name, b.monthly_limit, b.month, b.category_id
+        FROM budgets b
+        JOIN categories c ON b.category_id = c.category_id
+        WHERE b.user_id = ?
+        ORDER BY b.month DESC
+    """, (user_id,)).fetchall()
+    
+    # Budget Calculation Logic: Compare spent vs limit
+    budget_data = []
+    for b in user_budgets:
+        spent_row = conn.execute("""
+            SELECT SUM(amount) as total_spent 
+            FROM transactions 
+            WHERE user_id = ? AND category_id = ? AND type = 'expense' AND strftime('%Y-%m', transaction_date) = ?
+        """, (user_id, b["category_id"], b["month"])).fetchone()
+        
+        spent = spent_row["total_spent"] or 0.0
+        remaining = b["monthly_limit"] - spent
+        
+        budget_data.append({
+            "budget_id": b["budget_id"],
+            "category_name": b["category_name"],
+            "monthly_limit": b["monthly_limit"],
+            "month": b["month"],
+            "spent": spent,
+            "remaining": remaining
+        })
+        
+    conn.close()
+    return render_template("budgets.html", categories=categories, budgets=budget_data)
 
 @app.route("/reports")
 @login_required
