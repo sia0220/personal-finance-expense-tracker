@@ -163,6 +163,7 @@ def create_budget():
         conn.commit()
         flash("Budget created.")
     except sqlite3.IntegrityError:
+        conn.rollback()
         flash("Budget already exists for this category and month.")
     finally:
         conn.close()
