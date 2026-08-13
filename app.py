@@ -218,7 +218,7 @@ def budgets():
         elif monthly_limit <= 0:
             flash("Monthly limit must be a positive number greater than zero.")
         elif not is_valid_month:
-            flash("Please select a month.")
+            flash("Please select a valid month in YYYY-MM format.")
         else:
             try:
                 conn.execute(

@@ -168,17 +168,90 @@ def test_tc10_filter_transaction(auth_client):
 # BUDGET AND ALERT TESTS (Pending Implementation)
 # ==========================================
 
-def test_tc11_create_budget(auth_client):
-    # TC-11 | Create Budget | Enter category, month, and limit | Budget saves to database
+def test_create_budget_success(auth_client):
+    # TC-11 | Create Budget | Verify standard budget creation success with a valid month
+    conn = get_db_connection()
+    user = conn.execute("SELECT user_id FROM users WHERE email = 'auth_test@example.com'").fetchone()
+    category = conn.execute("SELECT category_id FROM categories WHERE user_id = ?", (user['user_id'],)).fetchone()
+    conn.close()
+
     response = auth_client.post(
         "/budgets",
-        data={"category_id": 1, "month": "2026-10", "monthly_limit": 500.00},
+        data={"category_id": category['category_id'], "month": "2026-08", "monthly_limit": 500.00},
         follow_redirects=True
     )
     assert b"Budget successfully created!" in response.data
 
+def test_create_budget_invalid_month_format(auth_client):
+    # Verify our Pure Python validation catches bad month formats
+    conn = get_db_connection()
+    user = conn.execute("SELECT user_id FROM users WHERE email = 'auth_test@example.com'").fetchone()
+    category = conn.execute("SELECT category_id FROM categories WHERE user_id = ?", (user['user_id'],)).fetchone()
+    cat_id = category['category_id']
+    conn.close()
+
+    # 1. Test out of bounds month (13)
+    resp1 = auth_client.post("/budgets", data={"category_id": cat_id, "month": "2026-13", "monthly_limit": 100}, follow_redirects=True)
+    assert b"Please select a valid month in YYYY-MM format" in resp1.data
+
+    # 2. Test bad length missing leading zero (2026-8)
+    resp2 = auth_client.post("/budgets", data={"category_id": cat_id, "month": "2026-8", "monthly_limit": 100}, follow_redirects=True)
+    assert b"Please select a valid month in YYYY-MM format" in resp2.data
+    
+    # 3. Test arbitrary text
+    resp3 = auth_client.post("/budgets", data={"category_id": cat_id, "month": "invalid", "monthly_limit": 100}, follow_redirects=True)
+    assert b"Please select a valid month in YYYY-MM format" in resp3.data
+
+def test_create_budget_invalid_limit(auth_client):
+    # Validation Test: Rejects negative limits and missing limits
+    conn = get_db_connection()
+    user = conn.execute("SELECT user_id FROM users WHERE email = 'auth_test@example.com'").fetchone()
+    category = conn.execute("SELECT category_id FROM categories WHERE user_id = ?", (user['user_id'],)).fetchone()
+    conn.close()
+
+    # Test negative limit
+    resp1 = auth_client.post(
+        "/budgets",
+        data={"category_id": category['category_id'], "month": "2026-09", "monthly_limit": -50.00},
+        follow_redirects=True
+    )
+    assert b"Monthly limit must be a positive number" in resp1.data
+
+    # Test empty limit (verifies our type-casting safety)
+    resp2 = auth_client.post(
+        "/budgets",
+        data={"category_id": category['category_id'], "month": "2026-09", "monthly_limit": ""},
+        follow_redirects=True
+    )
+    assert b"Monthly limit must be a positive number" in resp2.data
+
+def test_create_budget_unauthorized_category(auth_client):
+    # Validation Test: Rejects category manipulation
+    response = auth_client.post(
+        "/budgets",
+        data={"category_id": 999999, "month": "2026-10", "monthly_limit": 100.00},
+        follow_redirects=True
+    )
+    assert b"Invalid or unauthorized category" in response.data
+
+def test_create_duplicate_budget(auth_client):
+    # Verify the IntegrityError gracefully catches duplicate budget attempts
+    conn = get_db_connection()
+    user = conn.execute("SELECT user_id FROM users WHERE email = 'auth_test@example.com'").fetchone()
+    category = conn.execute("SELECT category_id FROM categories WHERE user_id = ?", (user['user_id'],)).fetchone()
+    cat_id = category['category_id']
+    conn.close()
+
+    # Create the first time
+    auth_client.post("/budgets", data={"category_id": cat_id, "month": "2026-11", "monthly_limit": 100.00})
+    
+    # Attempt to create the exact same month and category again
+    response = auth_client.post("/budgets", data={"category_id": cat_id, "month": "2026-11", "monthly_limit": 200.00}, follow_redirects=True)
+    
+    assert b"A budget for this category and month already exists." in response.data
 
 def test_tc12_near_limit_alert(auth_client):
+    # TC-12 | Near Limit Alert | DB Assertion added
     conn = get_db_connection()
     user = conn.execute("SELECT user_id FROM users WHERE email = 'auth_test@example.com'").fetchone()
     category = conn.execute("SELECT category_id FROM categories WHERE user_id = ?", (user['user_id'],)).fetchone()
@@ -197,8 +270,8 @@ def test_tc12_near_limit_alert(auth_client):
     conn.close()
     assert alert is not None, "Expected 'near limit' alert in DB."
 
-
 def test_tc13_over_limit_alert(auth_client):
+    # TC-13 | Over Limit Alert | DB Assertion added
     conn = get_db_connection()
     user = conn.execute("SELECT user_id FROM users WHERE email = 'auth_test@example.com'").fetchone()
     category = conn.execute("SELECT category_id FROM categories WHERE user_id = ?", (user['user_id'],)).fetchone()
@@ -217,30 +290,39 @@ def test_tc13_over_limit_alert(auth_client):
     conn.close()
     assert alert is not None, "Expected 'over limit' alert in DB."
 
-
-def test_create_budget_invalid_limit(auth_client):
-    # Validation Test: Rejects negative limits
+def test_transaction_integration_updates_alerts(auth_client):
+    # Comprehensive test: Verify adding a transaction triggers an alert, 
+    # and deleting the transaction clears the alert
     conn = get_db_connection()
     user = conn.execute("SELECT user_id FROM users WHERE email = 'auth_test@example.com'").fetchone()
-    category = conn.execute("SELECT category_id FROM categories WHERE user_id = ?", (user['user_id'],)).fetchone()
+    user_id = user['user_id']
+    
+    category = conn.execute("SELECT category_id FROM categories WHERE user_id = ?", (user_id,)).fetchone()
+    cat_id = category['category_id']
+    
+    # 1. Create a budget for $100
+    auth_client.post("/budgets", data={"category_id": cat_id, "month": "2026-12", "monthly_limit": 100.00})
+    
+    # 2. Add an expense transaction of $150 (Over limit)
+    auth_client.post("/transactions", data={
+        "type": "expense", "category_id": cat_id, "amount": 150.00, "transaction_date": "2026-12-15", "description": "Over limit test"
+    })
+    
+    # 3. Assert the 'over limit' alert was created in the database
+    alert = conn.execute("SELECT * FROM alerts WHERE user_id = ? AND alert_type = 'over limit'", (user_id,)).fetchone()
+    assert alert is not None, "Expected 'over limit' alert to be generated upon transaction insert."
+    
+    # 4. Fetch the newly created transaction ID
+    transaction = conn.execute("SELECT transaction_id FROM transactions WHERE description = 'Over limit test' AND user_id = ?", (user_id,)).fetchone()
+    
+    # 5. Delete the transaction (This should trigger the helper function to recalculate and drop the alert)
+    auth_client.post(f"/transactions/delete/{transaction['transaction_id']}", follow_redirects=True)
+    
+    # 6. Assert the alert was cleanly deleted from the database
+    cleared_alert = conn.execute("SELECT * FROM alerts WHERE user_id = ? AND alert_type = 'over limit'", (user_id,)).fetchone()
     conn.close()
-
-    response = auth_client.post(
-        "/budgets",
-        data={"category_id": category['category_id'], "month": "2026-10", "monthly_limit": -50.00},
-        follow_redirects=True
-    )
-    assert b"Monthly limit must be a positive number greater than zero" in response.data
-
-
-def test_create_budget_unauthorized_category(auth_client):
-    # Validation Test: Rejects category manipulation
-    response = auth_client.post(
-        "/budgets",
-        data={"category_id": 99999, "month": "2026-10", "monthly_limit": 100.00},
-        follow_redirects=True
-    )
-    assert b"Invalid or unauthorized category" in response.data
+    
+    assert cleared_alert is None, "Expected alert to be cleared after the transaction was deleted."
 
 # ==========================================
 # REPORT TESTS (Pending Implementation)
