@@ -175,76 +175,72 @@ def test_tc11_create_budget(auth_client):
         data={"category_id": 1, "month": "2026-10", "monthly_limit": 500.00},
         follow_redirects=True
     )
-    # Updated to match the exact flash message string from the implementation
     assert b"Budget successfully created!" in response.data
 
 
 def test_tc12_near_limit_alert(auth_client):
-    # TC-12 | Near Limit Alert | Spending reaches 80% of budget | Near-limit alert appears
+    conn = get_db_connection()
+    user = conn.execute("SELECT user_id FROM users WHERE email = 'auth_test@example.com'").fetchone()
+    category = conn.execute("SELECT category_id FROM categories WHERE user_id = ?", (user['user_id'],)).fetchone()
+    cat_id = category['category_id']
     
-    # 1. Create a budget for category 1 with a limit of $100
-    auth_client.post(
-        "/budgets",
-        data={"category_id": 1, "month": "2026-11", "monthly_limit": 100.00},
-        follow_redirects=True
-    )
-    
-    # 2. Post an expense transaction that hits exactly 80% ($80)
-    auth_client.post(
-        "/transactions",
-        data={
-            "type": "expense", 
-            "category_id": 1, 
-            "amount": 80.00, 
-            "transaction_date": "2026-11-15",
-            "description": "Test near limit"
-        },
-        follow_redirects=True
-    )
-    
-    # 3. Trigger the budget calculation helper function
-    response = auth_client.get("/budgets", follow_redirects=True)
-    
-    # 4. Verify the alert. If your UI renders alerts on this page, you can check the HTML:
-    # assert b"near limit" in response.data.lower()
-    
-    # (Optional) If you want to check the database directly instead of the HTML:
-    # from app import get_db_connection
-    # conn = get_db_connection()
-    # alert = conn.execute("SELECT alert_type FROM alerts WHERE alert_type = 'near limit'").fetchone()
-    # assert alert is not None
-    # conn.close()
+    # 1. Create budget ($100 limit)
+    auth_client.post("/budgets", data={"category_id": cat_id, "month": "2026-11", "monthly_limit": 100.00}, follow_redirects=True)
+
+    # 2. Add transaction hitting 80%
+    auth_client.post("/transactions", data={
+        "type": "expense", "category_id": cat_id, "amount": 80.00, "transaction_date": "2026-11-15", "description": "Test near limit"
+    }, follow_redirects=True)
+
+    # 3. Assert directly in DB
+    alert = conn.execute("SELECT * FROM alerts WHERE user_id = ? AND alert_type = 'near limit'", (user['user_id'],)).fetchone()
+    conn.close()
+    assert alert is not None, "Expected 'near limit' alert in DB."
 
 
 def test_tc13_over_limit_alert(auth_client):
-    # TC-13 | Over Limit Alert | Spending reaches or passes 100% | Over-limit alert appears
+    conn = get_db_connection()
+    user = conn.execute("SELECT user_id FROM users WHERE email = 'auth_test@example.com'").fetchone()
+    category = conn.execute("SELECT category_id FROM categories WHERE user_id = ?", (user['user_id'],)).fetchone()
+    cat_id = category['category_id']
     
-    # 1. Create a budget for category 2 with a limit of $200
-    auth_client.post(
-        "/budgets",
-        data={"category_id": 2, "month": "2026-12", "monthly_limit": 200.00},
-        follow_redirects=True
-    )
-    
-    # 2. Post an expense transaction that exceeds the limit ($250)
-    auth_client.post(
-        "/transactions",
-        data={
-            "type": "expense", 
-            "category_id": 2, 
-            "amount": 250.00, 
-            "transaction_date": "2026-12-05",
-            "description": "Test over limit"
-        },
-        follow_redirects=True
-    )
-    
-    # 3. Trigger the budget calculation helper function
-    response = auth_client.get("/budgets", follow_redirects=True)
-    
-    # 4. Verify the alert. If your UI renders alerts on this page, check the HTML:
-    # assert b"over limit" in response.data.lower()
+    # 1. Create budget ($200 limit)
+    auth_client.post("/budgets", data={"category_id": cat_id, "month": "2026-12", "monthly_limit": 200.00}, follow_redirects=True)
 
+    # 2. Add transaction exceeding 100%
+    auth_client.post("/transactions", data={
+        "type": "expense", "category_id": cat_id, "amount": 250.00, "transaction_date": "2026-12-05", "description": "Test over limit"
+    }, follow_redirects=True)
+
+    # 3. Assert directly in DB
+    alert = conn.execute("SELECT * FROM alerts WHERE user_id = ? AND alert_type = 'over limit'", (user['user_id'],)).fetchone()
+    conn.close()
+    assert alert is not None, "Expected 'over limit' alert in DB."
+
+
+def test_create_budget_invalid_limit(auth_client):
+    # Validation Test: Rejects negative limits
+    conn = get_db_connection()
+    user = conn.execute("SELECT user_id FROM users WHERE email = 'auth_test@example.com'").fetchone()
+    category = conn.execute("SELECT category_id FROM categories WHERE user_id = ?", (user['user_id'],)).fetchone()
+    conn.close()
+
+    response = auth_client.post(
+        "/budgets",
+        data={"category_id": category['category_id'], "month": "2026-10", "monthly_limit": -50.00},
+        follow_redirects=True
+    )
+    assert b"Monthly limit must be a positive number greater than zero" in response.data
+
+
+def test_create_budget_unauthorized_category(auth_client):
+    # Validation Test: Rejects category manipulation
+    response = auth_client.post(
+        "/budgets",
+        data={"category_id": 99999, "month": "2026-10", "monthly_limit": 100.00},
+        follow_redirects=True
+    )
+    assert b"Invalid or unauthorized category" in response.data
 
 # ==========================================
 # REPORT TESTS (Pending Implementation)

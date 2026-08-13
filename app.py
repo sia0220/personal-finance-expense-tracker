@@ -12,39 +12,69 @@ app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-later")
 
 bcrypt = Bcrypt(app) 
 
-def check_and_update_alerts(conn, user_id, budget_id, monthly_limit, spent):
+def process_budget_and_alerts(conn, user_id, category_id, month):
     """
-    Evaluates spending against the budget limit and generates alerts.
-    Expects the spent amount to be calculated prior to calling.
+    Calculates total spent for a category/month, evaluates alerts, 
+    commits changes, and returns the total spent amount.
     """
-    # 1. Determine the required alert state
-    new_alert_type = None
-    if spent >= monthly_limit:
-        new_alert_type = 'over limit'
-    elif spent >= (monthly_limit * 0.8):
-        new_alert_type = 'near limit'
-        
-    # 2. Insert or update the alerts table
+    if not category_id or not month:
+        return 0.0
+
+    # Ensure month is formatted as 'YYYY-MM'
+    month = str(month)[:7]
+
+    # 1. Calculate total spent (Single Source of Truth)
+    spent_row = conn.execute("""
+        SELECT SUM(amount) as total_spent 
+        FROM transactions 
+        WHERE user_id = ? AND category_id = ? AND type = 'expense' 
+        AND strftime('%Y-%m', transaction_date) = ?
+    """, (user_id, category_id, month)).fetchone()
+    
+    spent = spent_row["total_spent"] or 0.0
+
+    # 2. Check if a budget exists
+    budget = conn.execute("""
+        SELECT budget_id, monthly_limit 
+        FROM budgets 
+        WHERE user_id = ? AND category_id = ? AND month = ?
+    """, (user_id, category_id, month)).fetchone()
+
+    # If no budget exists, we just return the spent amount without updating alerts
+    if not budget:
+        return spent
+
+    budget_id = budget["budget_id"]
+    monthly_limit = budget["monthly_limit"]
+
+    # 3. Determine required alert state
+    new_alert_type = 'over limit' if spent >= monthly_limit else ('near limit' if spent >= (monthly_limit * 0.8) else None)
+
+    # 4. Manage alerts table
+    existing_alert = conn.execute(
+        "SELECT alert_id, alert_type FROM alerts WHERE user_id = ? AND budget_id = ?",
+        (user_id, budget_id)
+    ).fetchone()
+
     if new_alert_type:
-        existing_alert = conn.execute("""
-            SELECT alert_id, alert_type FROM alerts 
-            WHERE user_id = ? AND budget_id = ?
-        """, (user_id, budget_id)).fetchone()
-        
         if existing_alert:
-            # Only update if the alert severity has changed
             if existing_alert["alert_type"] != new_alert_type:
-                conn.execute("""
-                    UPDATE alerts 
-                    SET alert_type = ?, is_read = 0, triggered_at = CURRENT_TIMESTAMP 
-                    WHERE alert_id = ?
-                """, (new_alert_type, existing_alert["alert_id"]))
+                conn.execute(
+                    "UPDATE alerts SET alert_type = ?, is_read = 0, triggered_at = CURRENT_TIMESTAMP WHERE alert_id = ?", 
+                    (new_alert_type, existing_alert["alert_id"])
+                )
         else:
-            # Insert a brand new alert
-            conn.execute("""
-                INSERT INTO alerts (user_id, budget_id, alert_type) 
-                VALUES (?, ?, ?)
-            """, (user_id, budget_id, new_alert_type))
+            conn.execute(
+                "INSERT INTO alerts (user_id, budget_id, alert_type) VALUES (?, ?, ?)", 
+                (user_id, budget_id, new_alert_type)
+            )
+    elif existing_alert:
+        # Spending dropped below 80% (e.g., transaction deleted/edited)
+        conn.execute("DELETE FROM alerts WHERE alert_id = ?", (existing_alert["alert_id"],))
+
+    # 5. Commit alert changes and return spent for frontend use
+    conn.commit()
+    return spent
 
 def login_required(f): 
     @wraps(f)
@@ -129,6 +159,27 @@ def dashboard():
 @app.route("/transactions")
 @login_required
 def transactions():
+    # ==========================================
+# TODO (Transaction Team): BUDGET ALERT INTEGRATION
+# To connect transactions to the budget alert system, please import 
+# `process_budget_and_alerts` and integrate it into these routes:
+#
+# 1. ADD TRANSACTION (/transactions):
+#    After executing `conn.commit()` for the INSERT, call:
+#    process_budget_and_alerts(conn, user_id, category_id, transaction_date)
+#
+# 2. EDIT TRANSACTION (/transactions/edit/<id>):
+#    BEFORE the UPDATE, fetch the old category_id and transaction_date.
+#    After `conn.commit()`, call the helper twice to update both budgets:
+#    process_budget_and_alerts(conn, user_id, old_category_id, old_transaction_date)
+#    process_budget_and_alerts(conn, user_id, new_category_id, new_transaction_date)
+#
+# 3. DELETE TRANSACTION (/transactions/delete/<id>):
+#    BEFORE the DELETE, fetch the transaction's category_id and transaction_date.
+#    After `conn.commit()`, call the helper using those old values so it can 
+#    clear any existing alerts if the user's spending drops below the limit.
+#    process_budget_and_alerts(conn, user_id, old_category_id, old_transaction_date)
+# ==========================================
     return render_template("transactions.html")
 
 @app.route("/budgets", methods=["GET", "POST"])
@@ -136,25 +187,53 @@ def transactions():
 def budgets():
     user_id = session["user_id"]
     conn = get_db_connection()
+
     if request.method == "POST":
         category_id = request.form.get("category_id")
-        monthly_limit = float(request.form.get("monthly_limit"))
         month = request.form.get("month")
+        raw_limit = request.form.get("monthly_limit")
+        
+        try:
+            monthly_limit = float(raw_limit) if raw_limit else 0.0
+        except (ValueError, TypeError):
+            monthly_limit = 0.0
 
-        try: 
-            conn.execute(
-                "INSERT INTO budgets (user_id, category_id, monthly_limit, month) VALUES (?, ?, ?, ?)",
-                (user_id, category_id, monthly_limit, month)
-            )
-            conn.commit()
-            flash("Budget successfully created!")
-        except sqlite3.IntegrityError:
-            flash("A budget for this category and month already exists.")
-            
-    # Fetch categories for the dropdown menu in the form
+        # Validate category ownership
+        cat_exists = conn.execute(
+            "SELECT 1 FROM categories WHERE category_id = ? AND user_id = ?", 
+            (category_id, user_id)
+        ).fetchone()
+
+        is_valid_month = (
+            bool(month) 
+            and len(month) == 7 
+            and month[4] == '-' 
+            and month[:4].isdigit() 
+            and month[5:].isdigit() 
+            and (1 <= int(month[5:]) <= 12)
+        )
+
+        if not cat_exists:
+            flash("Invalid or unauthorized category.")
+        elif monthly_limit <= 0:
+            flash("Monthly limit must be a positive number greater than zero.")
+        elif not is_valid_month:
+            flash("Please select a month.")
+        else:
+            try:
+                conn.execute(
+                    "INSERT INTO budgets (user_id, category_id, monthly_limit, month) VALUES (?, ?, ?, ?)",
+                    (user_id, category_id, monthly_limit, month)
+                )
+                conn.commit()
+                flash("Budget successfully created!")
+                
+                process_budget_and_alerts(conn, user_id, category_id, month)
+            except sqlite3.IntegrityError:
+                flash("A budget for this category and month already exists.")
+
     categories = conn.execute("SELECT * FROM categories WHERE user_id = ?", (user_id,)).fetchall()
     
-    # Fetch all budgets for the user
     user_budgets = conn.execute("""
         SELECT b.budget_id, c.name AS category_name, b.monthly_limit, b.month, b.category_id
         FROM budgets b
@@ -162,20 +241,10 @@ def budgets():
         WHERE b.user_id = ?
         ORDER BY b.month DESC
     """, (user_id,)).fetchall()
-    
-    # Budget Calculation Logic: Compare spent vs limit
+
     budget_data = []
     for b in user_budgets:
-        spent_row = conn.execute("""
-            SELECT SUM(amount) as total_spent 
-            FROM transactions 
-            WHERE user_id = ? AND category_id = ? AND type = 'expense' AND strftime('%Y-%m', transaction_date) = ?
-        """, (user_id, b["category_id"], b["month"])).fetchone()
-        
-        spent = spent_row["total_spent"] or 0.0
-        remaining = b["monthly_limit"] - spent
-
-        check_and_update_alerts(conn, user_id, b["budget_id"], b["monthly_limit"], spent) #Alert check and update helper function addition
+        spent = process_budget_and_alerts(conn, user_id, b["category_id"], b["month"])
         
         budget_data.append({
             "budget_id": b["budget_id"],
@@ -183,9 +252,9 @@ def budgets():
             "monthly_limit": b["monthly_limit"],
             "month": b["month"],
             "spent": spent,
-            "remaining": remaining
+            "remaining": b["monthly_limit"] - spent
         })
-        
+
     conn.close()
     return render_template("budgets.html", categories=categories, budgets=budget_data)
 
