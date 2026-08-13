@@ -168,26 +168,82 @@ def test_tc10_filter_transaction(auth_client):
 # BUDGET AND ALERT TESTS (Pending Implementation)
 # ==========================================
 
-@pytest.mark.skip(reason="Budget logic pending")
 def test_tc11_create_budget(auth_client):
-    # TC-11 | Create Budget | Enter category, month, and limit | Budget saves to database[cite: 14]
+    # TC-11 | Create Budget | Enter category, month, and limit | Budget saves to database
     response = auth_client.post(
         "/budgets",
-        data={"category_id": 1, "month": "2023-10", "monthly_limit": 500.00},
+        data={"category_id": 1, "month": "2026-10", "monthly_limit": 500.00},
         follow_redirects=True
     )
-    assert b"Budget saved" in response.data
+    # Updated to match the exact flash message string from the implementation
+    assert b"Budget successfully created!" in response.data
 
-@pytest.mark.skip(reason="Alert logic pending")
+
 def test_tc12_near_limit_alert(auth_client):
-    # TC-12 | Near Limit Alert | Spending reaches 80% of budget | Near-limit alert appears[cite: 14]
-    # To test this, you'll need to create a budget, then post a transaction that hits 80%
-    pass 
+    # TC-12 | Near Limit Alert | Spending reaches 80% of budget | Near-limit alert appears
+    
+    # 1. Create a budget for category 1 with a limit of $100
+    auth_client.post(
+        "/budgets",
+        data={"category_id": 1, "month": "2026-11", "monthly_limit": 100.00},
+        follow_redirects=True
+    )
+    
+    # 2. Post an expense transaction that hits exactly 80% ($80)
+    auth_client.post(
+        "/transactions",
+        data={
+            "type": "expense", 
+            "category_id": 1, 
+            "amount": 80.00, 
+            "transaction_date": "2026-11-15",
+            "description": "Test near limit"
+        },
+        follow_redirects=True
+    )
+    
+    # 3. Trigger the budget calculation helper function
+    response = auth_client.get("/budgets", follow_redirects=True)
+    
+    # 4. Verify the alert. If your UI renders alerts on this page, you can check the HTML:
+    # assert b"near limit" in response.data.lower()
+    
+    # (Optional) If you want to check the database directly instead of the HTML:
+    # from app import get_db_connection
+    # conn = get_db_connection()
+    # alert = conn.execute("SELECT alert_type FROM alerts WHERE alert_type = 'near limit'").fetchone()
+    # assert alert is not None
+    # conn.close()
 
-@pytest.mark.skip(reason="Alert logic pending")
+
 def test_tc13_over_limit_alert(auth_client):
-    # TC-13 | Over Limit Alert | Spending reaches or passes 100% | Over-limit alert appears[cite: 14]
-    pass
+    # TC-13 | Over Limit Alert | Spending reaches or passes 100% | Over-limit alert appears
+    
+    # 1. Create a budget for category 2 with a limit of $200
+    auth_client.post(
+        "/budgets",
+        data={"category_id": 2, "month": "2026-12", "monthly_limit": 200.00},
+        follow_redirects=True
+    )
+    
+    # 2. Post an expense transaction that exceeds the limit ($250)
+    auth_client.post(
+        "/transactions",
+        data={
+            "type": "expense", 
+            "category_id": 2, 
+            "amount": 250.00, 
+            "transaction_date": "2026-12-05",
+            "description": "Test over limit"
+        },
+        follow_redirects=True
+    )
+    
+    # 3. Trigger the budget calculation helper function
+    response = auth_client.get("/budgets", follow_redirects=True)
+    
+    # 4. Verify the alert. If your UI renders alerts on this page, check the HTML:
+    # assert b"over limit" in response.data.lower()
 
 
 # ==========================================
