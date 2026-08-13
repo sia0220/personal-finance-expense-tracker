@@ -131,7 +131,7 @@ def dashboard():
 def transactions():
     return render_template("transactions.html")
 
-@app.route("/budgets")
+@app.route("/budgets", methods=["GET", "POST"])
 @login_required
 def budgets():
     user_id = session["user_id"]
