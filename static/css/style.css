@@ -258,3 +258,10 @@ select:disabled {
         flex-direction: column;
     }
 }
+
+.chart-container {
+    position: relative;
+    width: 100%;
+    height: 350px;
+    margin-bottom: 24px;
+}
