@@ -118,6 +118,109 @@ def test_tc05_logout(auth_client):
 
 
 # ==========================================
+# DASHBOARD TESTS
+# ==========================================
+
+def test_dashboard_shows_totals_and_recent_transactions(auth_client):
+    conn = get_db_connection()
+    user = conn.execute(
+        "SELECT user_id FROM users WHERE email = ?",
+        ("auth_test@example.com",),
+    ).fetchone()
+    category = conn.execute(
+        "SELECT category_id FROM categories WHERE user_id = ? ORDER BY category_id LIMIT 1",
+        (user["user_id"],),
+    ).fetchone()
+
+    transactions = [
+        (1200.00, "income", "Paycheck", "2026-08-01"),
+        (200.25, "expense", "First expense", "2026-08-02"),
+        (50.50, "expense", "Second expense", "2026-08-03"),
+        (10.00, "expense", "Third expense", "2026-08-04"),
+        (15.00, "expense", "Fourth expense", "2026-08-05"),
+        (20.00, "expense", "Newest expense", "2026-08-06"),
+    ]
+
+    for amount, transaction_type, description, transaction_date in transactions:
+        conn.execute(
+            """
+            INSERT INTO transactions (
+                user_id, category_id, amount, type, description, transaction_date
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user["user_id"],
+                category["category_id"],
+                amount,
+                transaction_type,
+                description,
+                transaction_date,
+            ),
+        )
+
+    conn.commit()
+    conn.close()
+
+    response = auth_client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert b"$1200.00" in response.data
+    assert b"$295.75" in response.data
+    assert b"$904.25" in response.data
+    assert b"Newest expense" in response.data
+    assert b"First expense" not in response.data
+
+
+def test_dashboard_shows_only_active_alerts_for_logged_in_user(auth_client):
+    conn = get_db_connection()
+    user = conn.execute(
+        "SELECT user_id FROM users WHERE email = ?",
+        ("auth_test@example.com",),
+    ).fetchone()
+    category = conn.execute(
+        "SELECT category_id FROM categories WHERE user_id = ? ORDER BY category_id LIMIT 1",
+        (user["user_id"],),
+    ).fetchone()
+    budget = conn.execute(
+        """
+        INSERT INTO budgets (user_id, category_id, monthly_limit, month)
+        VALUES (?, ?, ?, ?)
+        """,
+        (user["user_id"], category["category_id"], 500.00, "2026-08"),
+    )
+
+    conn.execute(
+        """
+        INSERT INTO alerts (user_id, budget_id, alert_type, is_read)
+        VALUES (?, ?, 'near limit', 0)
+        """,
+        (user["user_id"], budget.lastrowid),
+    )
+    conn.execute(
+        """
+        INSERT INTO alerts (user_id, budget_id, alert_type, is_read)
+        VALUES (?, ?, 'over limit', 1)
+        """,
+        (user["user_id"], budget.lastrowid),
+    )
+    conn.commit()
+    conn.close()
+
+    response = auth_client.get("/dashboard")
+
+    assert b"Near Limit" in response.data
+    assert b"Over Limit" not in response.data
+
+
+def test_dashboard_shows_empty_states(auth_client):
+    response = auth_client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert b"No alerts yet." in response.data
+    assert b"No recent transactions available." in response.data
+
+
+# ==========================================
 # TRANSACTION TESTS (Pending Implementation)
 # ==========================================
 

@@ -6,32 +6,65 @@
 <section class="summary-grid">
     <div class="card">
         <h3>Total Income</h3>
-        <p>$0.00</p>
+        <p class="summary-amount income-amount">${{ "%.2f"|format(total_income) }}</p>
     </div>
 
     <div class="card">
         <h3>Total Expenses</h3>
-        <p>$0.00</p>
+        <p class="summary-amount expense-amount">${{ "%.2f"|format(total_expenses) }}</p>
     </div>
 
     <div class="card">
         <h3>Remaining Budget</h3>
-        <p>$0.00</p>
+        <p class="summary-amount">${{ "%.2f"|format(remaining_budget) }}</p>
     </div>
 </section>
 
-<section>
-    <h3>Add Transaction</h3>
-    <p>This form will be connected during the transaction sprint.</p>
-</section>
-
-<section>
+<section class="page-section">
     <h3>Budget Alerts</h3>
-    <p>No alerts yet.</p>
+    {% if alerts %}
+        <ul class="alert-list">
+            {% for alert in alerts %}
+                <li class="alert-item alert-{{ alert.alert_type|replace(' ', '-') }}">
+                    <strong>{{ alert.category_name }}: {{ alert.alert_type|title }}</strong>
+                    <span>Triggered {{ alert.triggered_at }}</span>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="empty-state">No alerts yet.</p>
+    {% endif %}
 </section>
 
-<section>
+<section class="page-section">
     <h3>Recent Transactions</h3>
-    <p>No recent transactions available.</p>
+    {% if recent_transactions %}
+        <table class="recent-transactions">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Category</th>
+                    <th>Description</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for transaction in recent_transactions %}
+                    <tr>
+                        <td>{{ transaction.transaction_date }}</td>
+                        <td>{{ transaction.category_name }}</td>
+                        <td>{{ transaction.description or "No description" }}</td>
+                        <td>{{ transaction.type|title }}</td>
+                        <td class="{{ transaction.type }}-amount">
+                            ${{ "%.2f"|format(transaction.amount) }}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="empty-state">No recent transactions available.</p>
+    {% endif %}
 </section>
 {% endblock %}
