@@ -315,15 +315,15 @@ def test_transaction_integration_updates_alerts(auth_client):
     # 4. Fetch the newly created transaction ID
     transaction = conn.execute("SELECT transaction_id FROM transactions WHERE description = 'Over limit test' AND user_id = ?", (user_id,)).fetchone()
     
-    # 5. Delete the transaction (This should trigger the helper function to recalculate and drop the alert)
-    auth_client.post(f"/transactions/delete/{transaction['transaction_id']}", follow_redirects=True)
+    # 5. Delete the transaction using the correct route path (/transactions/<id>/delete)
+    auth_client.post(f"/transactions/{transaction['transaction_id']}/delete", follow_redirects=True)
     
     # 6. Assert the alert was cleanly deleted from the database
     cleared_alert = conn.execute("SELECT * FROM alerts WHERE user_id = ? AND alert_type = 'over limit'", (user_id,)).fetchone()
     conn.close()
     
     assert cleared_alert is None, "Expected alert to be cleared after the transaction was deleted."
-
+    
 # ==========================================
 # REPORT TESTS (Pending Implementation)
 # ==========================================
