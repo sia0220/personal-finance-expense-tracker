@@ -5,6 +5,7 @@ from functools import wraps
 import sqlite3
 from database import init_db, get_db_connection, create_default_categories
 from transaction_validation import validate_transaction_form
+import report_service
 
 
 app = Flask(__name__)
@@ -395,7 +396,47 @@ def budgets():
 @app.route("/reports")
 @login_required
 def reports():
-    return render_template("reports.html")
+    user_id = session["user_id"]
+    conn = get_db_connection()
+
+    category_spending = report_service.get_spending_by_category(conn, user_id)
+
+    monthly_spending = report_service.get_monthly_spending(conn, user_id)
+
+    totals = report_service.get_income_expense_totals(conn, user_id)
+
+    conn.close()
+
+    category_labels = [
+        item["category_name"]
+        for item in category_spending
+    ]
+
+    category_values = [
+        item["total_spent"]
+        for item in category_spending
+    ]
+
+    month_labels = [
+        item["month"]
+        for item in monthly_spending
+    ]
+
+    month_values = [
+        item["total_spent"]
+        for item in monthly_spending
+    ]
+
+    return render_template(
+        "reports.html",
+        category_spending = category_spending,
+        monthly_spending = monthly_spending,
+        totals = totals,
+        category_labels = category_labels,
+        category_values = category_values,
+        month_labels = month_labels,
+        month_values = month_values
+    )
 
 @app.route("/logout")
 def logout():
