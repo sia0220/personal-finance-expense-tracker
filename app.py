@@ -4,6 +4,8 @@ from flask_bcrypt import Bcrypt
 from functools import wraps
 import sqlite3
 from database import init_db, get_db_connection, create_default_categories
+from transaction_validation import validate_transaction_form
+import report_service
 import budget_service
 
 
@@ -27,6 +29,20 @@ def current_user_id():
     return session.get("user_id")
 
 
+def recalc_budget_after_transaction(conn, user_id, category_id, transaction_date):
+    month = transaction_date[:7]
+    budget = conn.execute(
+        """
+        SELECT budget_id FROM budgets
+        WHERE user_id = ? AND category_id = ? AND month = ?
+        """,
+        (user_id, category_id, month),
+    ).fetchone()
+    if budget is not None:
+        budget_service.evaluate_budget(conn, user_id, budget["budget_id"])
+        conn.commit()
+
+
 @app.route("/")
 def index():
     return redirect(url_for("login"))
@@ -47,7 +63,7 @@ def login():
 
         if user and bcrypt.check_password_hash(user["password_hash"], password):
             session["user_id"] = user["user_id"]
-            flash("Successfully logged in")
+            flash("Successfully logged in.")
             return redirect(url_for("dashboard"))
         else:
             flash("Invalid email or password.")
@@ -80,12 +96,12 @@ def register():
             create_default_categories(conn, new_user_id)
             conn.commit()
 
-            flash("Registration successful")
+            flash("Registration successful.")
             return redirect(url_for('login'))
 
         except sqlite3.IntegrityError:
             conn.rollback()
-            flash("Email is already registered")
+            flash("Email is already registered.")
             return redirect(url_for('register'))
         except Exception:
             conn.rollback()
@@ -103,10 +119,283 @@ def dashboard():
     return render_template("dashboard.html")
 
 
-@app.route("/transactions")
+@app.route("/transactions", methods=["GET", "POST"])
 @login_required
 def transactions():
-    return render_template("transactions.html")
+    user_id = session["user_id"]
+    conn = get_db_connection()
+
+    categories = conn.execute(
+        """
+        SELECT category_id, name
+        FROM categories
+        WHERE user_id = ?
+        ORDER BY name COLLATE NOCASE ASC
+        """,
+        (user_id,),
+    ).fetchall()
+
+    if request.method == "POST":
+        errors, cleaned_data = validate_transaction_form(request.form)
+
+        if not errors:
+            category = conn.execute(
+                """
+                SELECT category_id
+                FROM categories
+                WHERE category_id = ? AND user_id = ?
+                """,
+                (cleaned_data["category_id"], user_id),
+            ).fetchone()
+
+            if category is None:
+                errors.append("Please select a valid category.")
+
+        if errors:
+            conn.close()
+            for error in errors:
+                flash(error)
+            return redirect(url_for("transactions"))
+
+        conn.execute(
+            """
+            INSERT INTO transactions (
+            user_id,
+            category_id,
+            amount,
+            type,
+            description,
+            transaction_date
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user_id,
+                cleaned_data["category_id"],
+                cleaned_data["amount"],
+                cleaned_data["type"],
+                cleaned_data["description"],
+                cleaned_data["transaction_date"]
+            ),
+        )
+        conn.commit()
+
+        recalc_budget_after_transaction(
+            conn, user_id, cleaned_data["category_id"], cleaned_data["transaction_date"]
+        )
+        conn.close()
+
+        flash("Transaction added successfully.")
+        return redirect(url_for("transactions"))
+
+    search = request.args.get("search", "").strip()
+    selected_category_id = request.args.get("category_id", "").strip()
+    selected_type = request.args.get("type", "").strip().lower()
+    start_date = request.args.get("start_date", "").strip()
+    end_date = request.args.get("end_date", "").strip()
+
+    query = """
+        SELECT
+            t.transaction_id,
+            t.amount,
+            t.type,
+            t.description,
+            t.transaction_date,
+            t.category_id,
+            c.name AS category_name
+        FROM transactions AS t
+        JOIN categories AS c
+            ON c.category_id = t.category_id
+            AND c.user_id = t.user_id
+        WHERE t.user_id = ?
+        """
+
+    parameters = [user_id]
+
+    if search:
+        query += " AND COALESCE(t.description, '') LIKE ?"
+        parameters.append(f"%{search}%")
+
+    if selected_category_id:
+        try:
+            category_id = int(selected_category_id)
+            if category_id > 0:
+                query += " AND t.category_id = ?"
+                parameters.append(category_id)
+            else:
+                selected_category_id = ""
+        except ValueError:
+            selected_category_id = ""
+
+    if selected_type in {"income", "expense"}:
+        query += " AND t.type = ?"
+        parameters.append(selected_type)
+    else:
+        selected_type = ""
+
+    if start_date:
+        query += " AND t.transaction_date >= ?"
+        parameters.append(start_date)
+
+    if end_date:
+        query += " AND t.transaction_date <= ?"
+        parameters.append(end_date)
+
+    query += """
+        ORDER BY
+            t.transaction_date DESC,
+            t.transaction_id DESC
+        """
+
+    transaction_rows = conn.execute(query, parameters).fetchall()
+    conn.close()
+
+    return render_template(
+        "transactions.html",
+        categories=categories,
+        transactions=transaction_rows,
+        search=search,
+        selected_category_id=selected_category_id,
+        selected_type=selected_type,
+        start_date=start_date,
+        end_date=end_date
+    )
+
+
+@app.route("/transactions/<int:transaction_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_transaction(transaction_id):
+    user_id = session["user_id"]
+    conn = get_db_connection()
+
+    transaction = conn.execute(
+        """
+        SELECT *
+        FROM transactions
+        WHERE transaction_id = ?
+            AND user_id = ?
+        """,
+        (transaction_id, user_id),
+    ).fetchone()
+
+    if transaction is None:
+        conn.close()
+        flash("Transaction not found.")
+        return redirect(url_for("transactions"))
+
+    categories = conn.execute(
+        """
+        SELECT category_id, name
+        FROM categories
+        WHERE user_id = ?
+        ORDER BY name COLLATE NOCASE ASC
+        """,
+        (user_id,),
+    ).fetchall()
+
+    if request.method == "POST":
+        errors, cleaned_data = validate_transaction_form(request.form)
+
+        if not errors:
+            category = conn.execute(
+                """
+                SELECT category_id
+                FROM categories
+                WHERE category_id = ?
+                    AND user_id = ?
+                """,
+                (cleaned_data["category_id"], user_id),
+            ).fetchone()
+
+            if category is None:
+                errors.append("Please select a valid category.")
+
+        if errors:
+            conn.close()
+            for error in errors:
+                flash(error)
+            return redirect(url_for("edit_transaction", transaction_id=transaction_id))
+
+        old_category_id = transaction["category_id"]
+        old_date = transaction["transaction_date"]
+
+        conn.execute(
+            """
+            UPDATE transactions
+            SET
+                category_id = ?,
+                amount = ?,
+                type = ?,
+                description = ?,
+                transaction_date = ?
+            WHERE transaction_id = ?
+                AND user_id = ?
+            """,
+            (
+                cleaned_data["category_id"],
+                cleaned_data["amount"],
+                cleaned_data["type"],
+                cleaned_data["description"],
+                cleaned_data["transaction_date"],
+                transaction_id,
+                user_id
+            ),
+        )
+        conn.commit()
+
+        recalc_budget_after_transaction(
+            conn, user_id, cleaned_data["category_id"], cleaned_data["transaction_date"]
+        )
+        if old_category_id != cleaned_data["category_id"] or old_date[:7] != cleaned_data["transaction_date"][:7]:
+            recalc_budget_after_transaction(conn, user_id, old_category_id, old_date)
+        conn.close()
+
+        flash("Transaction updated successfully.")
+        return redirect(url_for("transactions"))
+
+    conn.close()
+
+    return render_template(
+        "edit_transaction.html",
+        transaction=transaction,
+        categories=categories
+    )
+
+
+@app.route("/transactions/<int:transaction_id>/delete", methods=["POST"])
+@login_required
+def delete_transaction(transaction_id):
+    user_id = session["user_id"]
+    conn = get_db_connection()
+
+    transaction = conn.execute(
+        "SELECT category_id, transaction_date FROM transactions WHERE transaction_id = ? AND user_id = ?",
+        (transaction_id, user_id),
+    ).fetchone()
+
+    cursor = conn.execute(
+        """
+        DELETE FROM transactions
+        WHERE transaction_id = ?
+            AND user_id = ?
+        """,
+        (transaction_id, user_id)
+    )
+    conn.commit()
+
+    if cursor.rowcount == 0:
+        conn.close()
+        flash("Transaction not found.")
+        return redirect(url_for("transactions"))
+
+    if transaction is not None:
+        recalc_budget_after_transaction(
+            conn, user_id, transaction["category_id"], transaction["transaction_date"]
+        )
+    conn.close()
+
+    flash("Transaction deleted successfully.")
+    return redirect(url_for("transactions"))
 
 
 @app.route("/budgets")
@@ -194,13 +483,36 @@ def alerts():
 @app.route("/reports")
 @login_required
 def reports():
-    return render_template("reports.html")
+    user_id = session["user_id"]
+    conn = get_db_connection()
+
+    category_spending = report_service.get_spending_by_category(conn, user_id)
+    monthly_spending = report_service.get_monthly_spending(conn, user_id)
+    totals = report_service.get_income_expense_totals(conn, user_id)
+
+    conn.close()
+
+    category_labels = [item["category_name"] for item in category_spending]
+    category_values = [item["total_spent"] for item in category_spending]
+    month_labels = [item["month"] for item in monthly_spending]
+    month_values = [item["total_spent"] for item in monthly_spending]
+
+    return render_template(
+        "reports.html",
+        category_spending=category_spending,
+        monthly_spending=monthly_spending,
+        totals=totals,
+        category_labels=category_labels,
+        category_values=category_values,
+        month_labels=month_labels,
+        month_values=month_values
+    )
 
 
 @app.route("/logout")
 def logout():
     session.clear()
-    flash("successfully logged out")
+    flash("Successfully logged out.")
     return redirect(url_for('login'))
 
 
