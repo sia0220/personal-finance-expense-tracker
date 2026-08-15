@@ -88,3 +88,31 @@ def test_transaction_below_threshold_creates_no_alert(client):
     count = conn.execute("SELECT COUNT(*) AS c FROM alerts").fetchone()["c"]
     conn.close()
     assert count == 0
+
+
+def test_invalid_budget_month_is_rejected(client):
+    register_and_login(client)
+    food_id = get_food_category_id()
+
+    client.post("/budgets/create", data={
+        "category_id": food_id, "monthly_limit": "100", "month": "2026-13"
+    })
+
+    conn = get_db_connection()
+    count = conn.execute("SELECT COUNT(*) AS c FROM budgets").fetchone()["c"]
+    conn.close()
+    assert count == 0
+
+
+def test_non_finite_budget_limit_is_rejected(client):
+    register_and_login(client)
+    food_id = get_food_category_id()
+
+    client.post("/budgets/create", data={
+        "category_id": food_id, "monthly_limit": "nan", "month": "2026-07"
+    })
+
+    conn = get_db_connection()
+    count = conn.execute("SELECT COUNT(*) AS c FROM budgets").fetchone()["c"]
+    conn.close()
+    assert count == 0

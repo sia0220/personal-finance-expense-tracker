@@ -1,4 +1,6 @@
 import os
+import math
+from datetime import datetime
 from flask import Flask, render_template, redirect, url_for, request, flash, session
 from flask_bcrypt import Bcrypt
 from functools import wraps
@@ -425,7 +427,16 @@ def create_budget():
     if not category_id or not month:
         flash("Please select a category and month.")
         return redirect(url_for("budgets"))
-    if monthly_limit is None or monthly_limit <= 0:
+
+    try:
+        parsed_month = datetime.strptime(month, "%Y-%m")
+        if parsed_month.strftime("%Y-%m") != month:
+            raise ValueError
+    except ValueError:
+        flash("Please enter a valid month.")
+        return redirect(url_for("budgets"))
+
+    if monthly_limit is None or not math.isfinite(monthly_limit) or monthly_limit <= 0:
         flash("Monthly limit must be greater than 0.")
         return redirect(url_for("budgets"))
 
