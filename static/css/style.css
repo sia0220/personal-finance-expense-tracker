@@ -98,11 +98,6 @@ button {
     background-color: #fde8e7;
 }
 
-.empty-state {
-    color: #666;
-    font-style: italic;
-}
-
 .messages {
     background-color: #fff3cd;
     border: 1px solid #ffeeba;
@@ -298,4 +293,11 @@ select:disabled {
     .section-heading {
         flex-direction: column;
     }
+}
+
+.chart-container {
+    position: relative;
+    width: 100%;
+    height: 350px;
+    margin-bottom: 24px;
 }

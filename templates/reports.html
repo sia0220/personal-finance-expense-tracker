@@ -4,12 +4,182 @@
 <h2>Reports</h2>
 
 <section>
+    <h3>Financial Summary</h3>
+
+    <div class="summary-grid">
+        <div class="card">
+            <h4>Total Income</h4>
+            <p>${{ "%.2f"|format(totals["total_income"]) }}</p>
+        </div>
+
+        <div class="card">
+            <h4>Total Expenses</h4>
+            <p>${{ "%.2f"|format(totals["total_expenses"]) }}</p>
+        </div>
+    </div>
+</section>
+
+<section>
     <h3>Spending by Category</h3>
-    <p>Charts will be added after transaction and budget data are connected.</p>
+
+    {% if category_spending %}
+        <div class="chart-container">
+            <canvas id="categorySpendingChart"></canvas>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Total Spent</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for item in category_spending %}
+                    <tr>
+                        <td>{{ item["category_name"] }}</td>
+                        <td>${{ "%.2f"|format(item["total_spent"]) }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No expense data is available yet.</p>
+    {% endif %}
 </section>
 
 <section>
     <h3>Monthly Spending Trend</h3>
-    <p>A summary table will be used as a backup if charts do not load.</p>
+
+    {% if monthly_spending %}
+        <div class="chart-container">
+            <canvas id="monthlySpendingChart"></canvas>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Month</th>
+                    <th>Total Spent</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for item in monthly_spending %}
+                    <tr>
+                        <td>{{ item["month"] }}</td>
+                        <td>${{ "%.2f"|format(item["total_spent"]) }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No monthly spending data is available yet.</p>
+    {% endif %}
 </section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    const categoryLabels = {{ category_labels | tojson }};
+    const categoryValues = {{ category_values | tojson }};
+
+    const monthLabels = {{ month_labels | tojson }};
+    const monthValues = {{ month_values | tojson }};
+
+    if (
+        typeof Chart !== "undefined" &&
+        categoryLabels.length > 0
+    ) {
+        const categoryCanvas = document.getElementById("categorySpendingChart");
+
+        const categoryContext = categoryCanvas.getContext("2d");
+
+        new Chart(categoryContext, {
+            type: "bar",
+            data: {
+                labels: categoryLabels,
+                datasets: [
+                    {
+                        label: "Spending by Category",
+                        data: categoryValues,
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return "$" + value;
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return "$" + Number(context.raw).toFixed(2);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    if (
+        typeof Chart !== "undefined" &&
+        monthLabels.length > 0
+    ) {
+        const monthlyCanvas = document.getElementById("monthlySpendingChart");
+
+        const monthlyContext = monthlyCanvas.getContext("2d");
+
+        new Chart(monthlyContext, {
+            type: "line",
+            data: {
+                labels: monthLabels,
+                datasets: [
+                    {
+                        label: "Monthly Spending",
+                        data: monthValues,
+                        borderWidth: 2,
+                        tension: 0.2
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return "$" + value;
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return "$" + Number(context.raw).toFixed(2);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+</script>
+
 {% endblock %}
