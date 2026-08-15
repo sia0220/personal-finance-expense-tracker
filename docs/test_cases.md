@@ -22,11 +22,11 @@
 
 ## Budget and Alert Tests
 
-| Test ID | Feature | Test Steps | Expected Result | Status |
-|---|---|---|---|---|
-| TC-11 | Create Budget | Enter category, month, and limit | Budget saves to database | Not Started |
-| TC-12 | Near Limit Alert | Spending reaches 80% of budget | Near-limit alert appears | Not Started |
-| TC-13 | Over Limit Alert | Spending reaches or passes 100% | Over-limit alert appears | Not Started |
+| Test ID | Feature | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-11 | Create Budget | Enter category, month, and limit | Budget saves to database | Budget saved; limit of $0 rejected | Pass |
+| TC-12 | Near Limit Alert | Spending reaches 80% of budget | Near-limit alert appears | Near-limit alert created at exactly 80% | Pass |
+| TC-13 | Over Limit Alert | Spending reaches or passes 100% | Over-limit alert appears | Over-limit alert created at 100% and above | Pass |
 
 ## Report Tests 
 

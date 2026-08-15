@@ -1,27 +1,78 @@
 {% extends "base.html" %}
-
 {% block content %}
 <h2>Budgets</h2>
 
 <section>
     <h3>Create Budget</h3>
-
-    <form>
-        <label for="category">Category</label>
-        <input type="text" id="category" name="category">
+    <form method="POST" action="{{ url_for('create_budget') }}">
+        <label for="category_id">Category</label>
+        <select id="category_id" name="category_id" required>
+            {% for c in categories %}
+                <option value="{{ c.category_id }}">{{ c.name }}</option>
+            {% endfor %}
+        </select>
 
         <label for="monthly_limit">Monthly Limit</label>
-        <input type="number" id="monthly_limit" name="monthly_limit" step="0.01">
+        <input type="number" id="monthly_limit" name="monthly_limit"
+               step="0.01" min="0.01" required>
 
         <label for="month">Month</label>
-        <input type="month" id="month" name="month">
+        <input type="month" id="month" name="month" required>
 
-        <button type="button">Create Budget</button>
+        <button type="submit">Create Budget</button>
     </form>
 </section>
 
 <section>
     <h3>Current Budgets</h3>
+    {% if budgets %}
+    <table>
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th>Month</th>
+                <th>Monthly Limit</th>
+                <th>Spent</th>
+                <th>Progress</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for b in budgets %}
+            <tr>
+                <td>{{ b.category_name }}</td>
+                <td>{{ b.month }}</td>
+                <td>${{ "%.2f"|format(b.monthly_limit) }}</td>
+                <td>${{ "%.2f"|format(b.spending) }}</td>
+                <td>
+                    {% set bar = b.percent if b.percent < 100 else 100 %}
+                    {% if b.alert_type == 'over limit' %}
+                        {% set color = '#E24B4A' %}
+                    {% elif b.alert_type == 'near limit' %}
+                        {% set color = '#EF9F27' %}
+                    {% else %}
+                        {% set color = '#1D9E75' %}
+                    {% endif %}
+                    <div style="height:10px;background:#eee;border-radius:5px;overflow:hidden;">
+                        <div style="height:100%;width:{{ bar }}%;background:{{ color }};"></div>
+                    </div>
+                    <small>{{ b.percent }}%</small>
+                </td>
+                <td>
+                    {% if b.alert_type == 'over limit' %}
+                        <span style="color:#A32D2D;font-weight:bold;">Over limit</span>
+                    {% elif b.alert_type == 'near limit' %}
+                        <span style="color:#854F0B;font-weight:bold;">Near limit</span>
+                    {% else %}
+                        <span style="color:#0F6E56;">On track</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
     <p>No budgets created yet.</p>
+    {% endif %}
 </section>
 {% endblock %}

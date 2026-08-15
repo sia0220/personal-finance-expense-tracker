@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Budget Alerts</h2>
+<section>
+    {% if alerts %}
+    <table>
+        <thead>
+            <tr><th>Category</th><th>Alert</th><th>Triggered</th></tr>
+        </thead>
+        <tbody>
+            {% for a in alerts %}
+            <tr>
+                <td>{{ a.category_name }}</td>
+                <td>{{ a.alert_type }}</td>
+                <td>{{ a.triggered_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No alerts yet.</p>
+    {% endif %}
+</section>
+{% endblock %}
