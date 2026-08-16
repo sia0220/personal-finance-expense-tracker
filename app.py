@@ -121,6 +121,8 @@ def dashboard():
     user_id = session["user_id"]
     conn = get_db_connection()
 
+    current_month = datetime.now().strftime("%Y-%m")
+
     totals = conn.execute(
         """
         SELECT
@@ -130,8 +132,9 @@ def dashboard():
                 AS total_expenses
         FROM transactions
         WHERE user_id = ?
+          AND substr(transaction_date, 1, 7) = ?
         """,
-        (user_id,),
+        (user_id, current_month),
     ).fetchone()
 
     recent_transactions = conn.execute(
@@ -174,7 +177,6 @@ def dashboard():
         (user_id,),
     ).fetchall()
 
-    current_month = datetime.now().strftime("%Y-%m")
     budget_overview = budget_service.get_budget_overview(conn, user_id)
     remaining_budget = sum(
         float(budget["monthly_limit"]) - float(budget["spending"])

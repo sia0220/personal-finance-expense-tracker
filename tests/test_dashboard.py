@@ -70,14 +70,21 @@ def test_empty_dashboard_shows_zero_values_and_empty_messages(client):
     assert "Remaining Budget" in page
     assert "No alerts yet." in page
     assert "No recent transactions available." in page
+    assert 'href="/transactions">Add Transaction</a>' in page
     assert page.count("$0.00") >= 3
 
 
 def test_dashboard_totals_and_remaining_budget_are_user_scoped(client):
     register_and_login(client)
     user_id, category_id = get_user_and_food_category()
-    month = datetime.now().strftime("%Y-%m")
+    now = datetime.now()
+    month = now.strftime("%Y-%m")
     transaction_date = f"{month}-15"
+    if now.month == 1:
+        previous_month = f"{now.year - 1}-12"
+    else:
+        previous_month = f"{now.year}-{now.month - 1:02d}"
+    previous_transaction_date = f"{previous_month}-15"
 
     conn = get_db_connection()
 
@@ -104,6 +111,24 @@ def test_dashboard_totals_and_remaining_budget_are_user_scoped(client):
         VALUES (?, ?, ?, 'expense', ?, ?)
         """,
         (user_id, category_id, 200.00, "Groceries", transaction_date),
+    )
+
+    # Previous-month transactions must not be included in dashboard totals.
+    conn.execute(
+        """
+        INSERT INTO transactions
+            (user_id, category_id, amount, type, description, transaction_date)
+        VALUES (?, ?, ?, 'income', ?, ?)
+        """,
+        (user_id, category_id, 1234.56, "Previous month income", previous_transaction_date),
+    )
+    conn.execute(
+        """
+        INSERT INTO transactions
+            (user_id, category_id, amount, type, description, transaction_date)
+        VALUES (?, ?, ?, 'expense', ?, ?)
+        """,
+        (user_id, category_id, 432.10, "Previous month expense", previous_transaction_date),
     )
 
     other_user = conn.execute(
@@ -143,9 +168,9 @@ def test_dashboard_totals_and_remaining_budget_are_user_scoped(client):
     page = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "$1000.00" in page
-    assert "$200.00" in page
-    assert "$300.00" in page
+    assert '<p class="summary-amount income-amount">$1000.00</p>' in page
+    assert '<p class="summary-amount expense-amount">$200.00</p>' in page
+    assert '<p class="summary-amount">$300.00</p>' in page
     assert "$9999.00" not in page
     assert "Other user's expense" not in page
 
