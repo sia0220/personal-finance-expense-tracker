@@ -118,7 +118,82 @@ def register():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    return render_template("dashboard.html")
+    user_id = session["user_id"]
+    conn = get_db_connection()
+
+    current_month = datetime.now().strftime("%Y-%m")
+
+    totals = conn.execute(
+        """
+        SELECT
+            COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0)
+                AS total_income,
+            COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0)
+                AS total_expenses
+        FROM transactions
+        WHERE user_id = ?
+          AND substr(transaction_date, 1, 7) = ?
+        """,
+        (user_id, current_month),
+    ).fetchone()
+
+    recent_transactions = conn.execute(
+        """
+        SELECT
+            t.transaction_id,
+            t.amount,
+            t.type,
+            t.description,
+            t.transaction_date,
+            c.name AS category_name
+        FROM transactions AS t
+        JOIN categories AS c
+            ON c.category_id = t.category_id
+            AND c.user_id = t.user_id
+        WHERE t.user_id = ?
+        ORDER BY t.transaction_date DESC, t.transaction_id DESC
+        LIMIT 5
+        """,
+        (user_id,),
+    ).fetchall()
+
+    active_alerts = conn.execute(
+        """
+        SELECT
+            a.alert_id,
+            a.alert_type,
+            a.triggered_at,
+            c.name AS category_name
+        FROM alerts AS a
+        JOIN budgets AS b
+            ON b.budget_id = a.budget_id
+            AND b.user_id = a.user_id
+        JOIN categories AS c
+            ON c.category_id = b.category_id
+            AND c.user_id = a.user_id
+        WHERE a.user_id = ? AND a.is_read = 0
+        ORDER BY a.triggered_at DESC, a.alert_id DESC
+        """,
+        (user_id,),
+    ).fetchall()
+
+    budget_overview = budget_service.get_budget_overview(conn, user_id)
+    remaining_budget = sum(
+        float(budget["monthly_limit"]) - float(budget["spending"])
+        for budget in budget_overview
+        if budget["month"] == current_month
+    )
+
+    conn.close()
+
+    return render_template(
+        "dashboard.html",
+        total_income=float(totals["total_income"]),
+        total_expenses=float(totals["total_expenses"]),
+        remaining_budget=remaining_budget,
+        recent_transactions=recent_transactions,
+        alerts=active_alerts,
+    )
 
 
 @app.route("/transactions", methods=["GET", "POST"])

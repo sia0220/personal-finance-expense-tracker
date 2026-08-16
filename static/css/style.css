@@ -62,6 +62,42 @@ button {
     background-color: #fafafa;
 }
 
+.summary-amount {
+    margin-bottom: 0;
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.income-amount {
+    color: #19733b;
+}
+
+.expense-amount {
+    color: #a12622;
+}
+
+.alert-list {
+    display: grid;
+    gap: 10px;
+    padding: 0;
+    list-style: none;
+}
+
+.alert-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 15px;
+    padding: 12px;
+    border-left: 5px solid #d29b00;
+    border-radius: 5px;
+    background-color: #fff6d6;
+}
+
+.alert-item.alert-over-limit {
+    border-left-color: #a12622;
+    background-color: #fde8e7;
+}
+
 .messages {
     background-color: #fff3cd;
     border: 1px solid #ffeeba;
