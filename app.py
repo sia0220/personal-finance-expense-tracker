@@ -5,7 +5,7 @@ from flask import Flask, render_template, redirect, url_for, request, flash, ses
 from flask_bcrypt import Bcrypt
 from functools import wraps
 import sqlite3
-from database import init_db, get_db_connection, create_default_categories
+from database import get_db_connection, create_default_categories
 from transaction_validation import validate_transaction_form
 import report_service
 import budget_service
@@ -603,5 +603,4 @@ def logout():
 
 
 if __name__ == "__main__":
-    init_db()
     app.run(debug=True)

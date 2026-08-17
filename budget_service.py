@@ -42,8 +42,7 @@ def evaluate_budget(conn, user_id, budget_id):
     percent = get_percent_used(spending, budget["monthly_limit"])
     alert_type = check_threshold(spending, budget["monthly_limit"])
 
-    if alert_type is not None:
-        _record_alert_if_new(conn, user_id, budget_id, alert_type)
+    _sync_active_alert(conn, user_id, budget_id, alert_type)
 
     return {
         "budget_id": budget_id,
@@ -53,27 +52,39 @@ def evaluate_budget(conn, user_id, budget_id):
         "alert_type": alert_type,
     }
 
-def _record_alert_if_new(conn, user_id, budget_id, alert_type):
-    latest = conn.execute(
+def _sync_active_alert(conn, user_id, budget_id, alert_type):
+    # Keep at most one unread alert that matches the budget's current state.
+    active = conn.execute(
         """
-        SELECT alert_type FROM alerts
-        WHERE budget_id = ? AND user_id = ?
+        SELECT alert_id, alert_type
+        FROM alerts
+        WHERE budget_id = ? AND user_id = ? AND is_read = 0
         ORDER BY triggered_at DESC, alert_id DESC
         LIMIT 1
         """,
         (budget_id, user_id),
     ).fetchone()
 
-    if latest is not None and latest["alert_type"] == alert_type:
+    if active is not None and active["alert_type"] == alert_type:
         return
 
     conn.execute(
         """
-        INSERT INTO alerts (user_id, budget_id, alert_type)
-        VALUES (?, ?, ?)
+        UPDATE alerts
+        SET is_read = 1
+        WHERE budget_id = ? AND user_id = ? AND is_read = 0
         """,
-        (user_id, budget_id, alert_type),
+        (budget_id, user_id),
     )
+
+    if alert_type is not None:
+        conn.execute(
+            """
+            INSERT INTO alerts (user_id, budget_id, alert_type)
+            VALUES (?, ?, ?)
+            """,
+            (user_id, budget_id, alert_type),
+        )
 
 def get_budget_overview(conn, user_id):
     budgets = conn.execute(
